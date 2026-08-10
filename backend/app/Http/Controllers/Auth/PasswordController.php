@@ -53,9 +53,12 @@ class PasswordController extends Controller
         $this->motsDePasse->changer($user, $donnees['nouveau_mot_de_passe']);
         // Les autres sessions éventuelles sont invalidées, la session courante reste active
         $this->motsDePasse->invaliderSessions($user, $request->session()->getId());
+        // Rafraîchit le hash stocké en session, sinon AuthenticateSession
+        // déconnecterait immédiatement la session courante
+        $request->session()->put('password_hash_web', $user->fresh()->getAuthPassword());
 
         $this->audit->enregistrer('changement_mdp', userId: $user->id);
-        $user->notify(new MotDePasseModifie);
+        $this->notifierSansBloquer($user);
 
         return response()->json(['message' => 'Mot de passe modifié.']);
     }
@@ -108,7 +111,7 @@ class PasswordController extends Controller
                 $this->motsDePasse->invaliderSessions($user);
 
                 $this->audit->enregistrer('reinitialisation_mdp', userId: $user->id);
-                $user->notify(new MotDePasseModifie);
+                $this->notifierSansBloquer($user);
             },
         );
 
@@ -119,5 +122,18 @@ class PasswordController extends Controller
         }
 
         return response()->json(['message' => 'Mot de passe réinitialisé : vous pouvez vous connecter.']);
+    }
+
+    /**
+     * La notification de sécurité est best-effort : un serveur mail
+     * indisponible ne doit jamais faire échouer l'opération elle-même.
+     */
+    private function notifierSansBloquer(User $user): void
+    {
+        try {
+            $user->notify(new MotDePasseModifie);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
