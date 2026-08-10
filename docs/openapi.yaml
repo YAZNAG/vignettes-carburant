@@ -1,0 +1,508 @@
+openapi: 3.0.3
+info:
+  title: API Gestion des vignettes carburant
+  version: 1.0.0
+  description: |
+    API REST du lot 1 (socle sécurité + référentiels).
+
+    **Authentification** : session serveur (cookie HttpOnly, SameSite=Lax) via
+    Laravel Sanctum en mode SPA. Le client doit d'abord appeler
+    `GET /sanctum/csrf-cookie` puis envoyer l'en-tête `X-XSRF-TOKEN` sur toute
+    requête de modification. Les requêtes doivent porter un en-tête `Origin`
+    correspondant à `SANCTUM_STATEFUL_DOMAINS`.
+
+    **Autorisations** : chaque route vérifie côté serveur une permission
+    atomique `domaine.action`. Une requête non autorisée renvoie **403** et
+    est journalisée dans le journal d'audit.
+
+    **Erreurs de validation** : statut **422** au format Laravel
+    `{ "message": "...", "errors": { "champ": ["message"] } }`.
+servers:
+  - url: http://localhost:8000
+tags:
+  - name: Authentification
+  - name: Utilisateurs
+  - name: Référentiels
+  - name: Audit
+  - name: Import
+  - name: Paramètres
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Authentification]
+      summary: Connexion (étape 1)
+      description: >
+        Identifiant = e-mail ou nom d'utilisateur, insensible à la casse.
+        Après 5 échecs, le compte est verrouillé 15 minutes (statut 423).
+        Limitation par adresse IP (statut 429). Si la 2FA est active, la
+        réponse est `{"etape": "2fa"}` et la session n'est pas encore établie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifiant, password]
+              properties:
+                identifiant: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Session établie (profil) ou défi 2FA
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Profil"
+                  - type: object
+                    properties: { etape: { type: string, enum: ["2fa"] } }
+        "422": { $ref: "#/components/responses/Validation" }
+        "423": { description: Compte temporairement verrouillé }
+        "429": { description: Trop de tentatives depuis cette adresse IP }
+
+  /api/auth/login/2fa:
+    post:
+      tags: [Authentification]
+      summary: Connexion (étape 2 — code TOTP ou code de secours)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: "6 chiffres TOTP ou code de secours XXXX-XXXX" }
+      responses:
+        "200":
+          description: Session établie
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profil" }
+        "419": { description: Défi expiré, recommencer la connexion }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /api/auth/logout:
+    post:
+      tags: [Authentification]
+      summary: Déconnexion (invalide la session côté serveur)
+      responses: { "200": { description: OK } }
+
+  /api/auth/me:
+    get:
+      tags: [Authentification]
+      summary: Profil, permissions et paramètres de session
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profil" }
+        "401": { description: Non authentifié }
+
+  /api/auth/changer-mot-de-passe:
+    post:
+      tags: [Authentification]
+      summary: Changement de mot de passe (mot de passe actuel exigé)
+      description: >
+        Politique : 10 caractères min., majuscule, minuscule, chiffre, absent
+        de la liste des mots de passe courants, différent des 3 derniers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mot_de_passe_actuel, nouveau_mot_de_passe, nouveau_mot_de_passe_confirmation]
+              properties:
+                mot_de_passe_actuel: { type: string, format: password }
+                nouveau_mot_de_passe: { type: string, format: password }
+                nouveau_mot_de_passe_confirmation: { type: string, format: password }
+      responses:
+        "200": { description: Mot de passe modifié (autres sessions invalidées) }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /api/auth/mot-de-passe-oublie:
+    post:
+      tags: [Authentification]
+      summary: Demande de réinitialisation
+      description: Réponse identique que l'e-mail existe ou non (pas d'énumération).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses: { "200": { description: Message neutre } }
+
+  /api/auth/reinitialiser-mot-de-passe:
+    post:
+      tags: [Authentification]
+      summary: Réinitialisation par jeton (usage unique, 30 minutes)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, email, password, password_confirmation]
+              properties:
+                token: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                password_confirmation: { type: string, format: password }
+      responses:
+        "200": { description: Mot de passe réinitialisé, toutes les sessions invalidées }
+        "422": { description: Jeton invalide/expiré ou politique non respectée }
+
+  /api/auth/2fa/enroler:
+    post:
+      tags: [Authentification]
+      summary: Démarrer l'enrôlement TOTP (QR code SVG + secret)
+      responses:
+        "200":
+          description: Secret généré (inactif tant que non confirmé)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauth_uri: { type: string }
+                  qr_svg: { type: string, description: SVG inline }
+  /api/auth/2fa/confirmer:
+    post:
+      tags: [Authentification]
+      summary: Confirmer l'enrôlement — délivre les 8 codes de secours (une seule fois)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties: { code: { type: string } }
+      responses:
+        "200":
+          description: 2FA activée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  codes_secours: { type: array, items: { type: string }, minItems: 8, maxItems: 8 }
+  /api/auth/2fa/desactiver:
+    post:
+      tags: [Authentification]
+      summary: Désactiver la 2FA (mot de passe + code exigés ; refusé si le rôle l'impose)
+      responses:
+        "200": { description: Désactivée }
+        "403": { description: 2FA obligatoire pour ce rôle }
+  /api/auth/2fa/codes-secours:
+    post:
+      tags: [Authentification]
+      summary: Régénérer les codes de secours (les anciens sont invalidés)
+      responses: { "200": { description: Nouveaux codes (une seule restitution) } }
+
+  /api/utilisateurs:
+    get:
+      tags: [Utilisateurs]
+      summary: Liste paginée (permission utilisateur.consulter)
+      parameters:
+        - { name: recherche, in: query, schema: { type: string } }
+        - { name: role_id, in: query, schema: { type: integer } }
+        - { name: service_id, in: query, schema: { type: integer } }
+        - { name: actif, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: par_page, in: query, schema: { type: integer, maximum: 100 } }
+      responses: { "200": { description: Page d'utilisateurs }, "403": { $ref: "#/components/responses/Interdit" } }
+    post:
+      tags: [Utilisateurs]
+      summary: Créer un compte (permission utilisateur.creer) — changement de mdp forcé à la 1re connexion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom, prenom, email, username, role_id, mot_de_passe_initial]
+              properties:
+                nom: { type: string }
+                prenom: { type: string }
+                email: { type: string, format: email }
+                username: { type: string, pattern: "^[a-zA-Z0-9._-]+$" }
+                telephone: { type: string, nullable: true }
+                role_id: { type: integer }
+                service_id: { type: integer, nullable: true }
+                site_id: { type: integer, nullable: true }
+                mot_de_passe_initial: { type: string, format: password }
+      responses: { "201": { description: Créé }, "422": { $ref: "#/components/responses/Validation" } }
+
+  /api/utilisateurs/{id}:
+    get:
+      tags: [Utilisateurs]
+      summary: Fiche utilisateur
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+    put:
+      tags: [Utilisateurs]
+      summary: Modifier (permission utilisateur.modifier)
+      description: >
+        Interdit de modifier son propre rôle (403) et de retirer le rôle
+        administrateur au dernier admin actif (409).
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK }, "403": { description: Propre rôle }, "409": { description: Dernier admin } }
+
+  /api/utilisateurs/{id}/desactiver:
+    post:
+      tags: [Utilisateurs]
+      summary: Désactiver (jamais de suppression ; sessions fermées)
+      description: Refusé pour son propre compte (403) et pour le dernier administrateur actif (409).
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK }, "403": { description: Propre compte }, "409": { description: Dernier admin } }
+  /api/utilisateurs/{id}/reactiver:
+    post:
+      tags: [Utilisateurs]
+      summary: Réactiver un compte
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+  /api/utilisateurs/{id}/reinitialiser-mdp:
+    post:
+      tags: [Utilisateurs]
+      summary: Réinitialisation par l'administrateur (changement forcé, sessions fermées)
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nouveau_mot_de_passe]
+              properties: { nouveau_mot_de_passe: { type: string, format: password } }
+      responses: { "200": { description: OK } }
+  /api/utilisateurs/{id}/deverrouiller:
+    post:
+      tags: [Utilisateurs]
+      summary: Déverrouillage manuel d'un compte bloqué
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+  /api/utilisateurs/{id}/connexions:
+    get:
+      tags: [Utilisateurs]
+      summary: 50 dernières tentatives de connexion du compte
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /api/roles:
+    get:
+      tags: [Utilisateurs]
+      summary: Rôles et leurs permissions
+      responses: { "200": { description: OK } }
+
+  /api/parametres:
+    get:
+      tags: [Paramètres]
+      summary: Paramètres généraux + obligations 2FA par rôle (permission parametre.consulter)
+      responses: { "200": { description: OK } }
+    put:
+      tags: [Paramètres]
+      summary: Modifier les paramètres (permission parametre.modifier)
+      responses: { "200": { description: OK }, "422": { $ref: "#/components/responses/Validation" } }
+  /api/roles/{id}/totp-obligatoire:
+    put:
+      tags: [Paramètres]
+      summary: Imposer/lever la 2FA pour un rôle (toujours active pour Administrateur)
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK }, "409": { description: Administrateur non modifiable } }
+
+  /api/audit:
+    get:
+      tags: [Audit]
+      summary: Journal d'audit paginé (permission audit.consulter)
+      parameters:
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: entite_type, in: query, schema: { type: string } }
+        - { name: date_debut, in: query, schema: { type: string, format: date } }
+        - { name: date_fin, in: query, schema: { type: string, format: date } }
+      responses: { "200": { description: "Entrées {action, entite, avant, apres, ip…}" } }
+  /api/audit/export:
+    get:
+      tags: [Audit]
+      summary: Export Excel du journal (permissions audit.consulter + export.generer)
+      responses: { "200": { description: Fichier XLSX } }
+
+  /api/{referentiel}:
+    get:
+      tags: [Référentiels]
+      summary: Liste paginée d'un référentiel (permission {domaine}.consulter)
+      description: >
+        `referentiel` ∈ vehicules, beneficiaires, services, sites,
+        types-vignette, coupures, motifs-sortie, fournisseurs, exercices.
+        Recherche insensible aux accents et à la casse. Filtres par égalité
+        selon la ressource (service_id, site_id, statut, actif…).
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+        - { name: recherche, in: query, schema: { type: string } }
+        - { name: tri, in: query, schema: { type: string } }
+        - { name: sens, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: par_page, in: query, schema: { type: integer, maximum: 100 } }
+        - { name: actif, in: query, schema: { type: boolean } }
+      responses: { "200": { description: Page Laravel standard } }
+    post:
+      tags: [Référentiels]
+      summary: Créer (permission {domaine}.creer)
+      description: >
+        Saisies normalisées (majuscules immatriculations, capitalisation des
+        noms, espaces superflus supprimés). Pour véhicules et bénéficiaires,
+        si une valeur clé très proche existe (Levenshtein ≤ 2), la réponse est
+        **409** `{confirmation_requise: true, similaires: [...]}` ; renvoyer la
+        même requête avec `confirmer_similaire: true` pour passer outre.
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Créé }
+        "409": { description: Quasi-doublon détecté, confirmation requise }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /api/{referentiel}/{id}:
+    put:
+      tags: [Référentiels]
+      summary: Modifier (permission {domaine}.modifier)
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses: { "200": { description: OK }, "409": { description: Quasi-doublon }, "422": { $ref: "#/components/responses/Validation" } }
+    delete:
+      tags: [Référentiels]
+      summary: Suppression physique — uniquement si l'élément n'a jamais servi
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses: { "200": { description: Supprimé }, "409": { description: Déjà utilisé — désactivation seule possible } }
+
+  /api/{referentiel}/{id}/desactiver:
+    post:
+      tags: [Référentiels]
+      summary: Désactivation logique (permission {domaine}.desactiver — Administrateur)
+      description: >
+        L'élément disparaît des listes de saisie mais reste en consultation.
+        Refusée (409, `suppression_possible: true`) si l'élément n'a jamais servi.
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses: { "200": { description: Désactivé }, "409": { description: Jamais utilisé ou déjà désactivé } }
+  /api/{referentiel}/{id}/reactiver:
+    post:
+      tags: [Référentiels]
+      summary: Réactivation
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses: { "200": { description: OK } }
+
+  /api/{referentiel}-export:
+    get:
+      tags: [Référentiels]
+      summary: Export Excel (permissions {domaine}.consulter + export.generer)
+      parameters:
+        - { name: referentiel, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Fichier XLSX (mêmes filtres que la liste) } }
+
+  /api/import/{type}/modele:
+    get:
+      tags: [Import]
+      summary: Modèle de fichier d'import (permission referentiel.importer)
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string, enum: [vehicules, beneficiaires] } }
+      responses: { "200": { description: Fichier XLSX modèle } }
+  /api/import/{type}/previsualiser:
+    post:
+      tags: [Import]
+      summary: Prévisualisation — rapport ligne par ligne, aucune écriture
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string, enum: [vehicules, beneficiaires] } }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                fichier: { type: string, format: binary, description: "xlsx ou csv, 5 Mo max" }
+      responses:
+        "200":
+          description: Rapport
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lignes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        numero: { type: integer }
+                        donnees: { type: object }
+                        erreurs: { type: array, items: { type: string } }
+                        avertissements: { type: array, items: { type: string } }
+                  total: { type: integer }
+                  importables: { type: integer }
+                  erreurs: { type: integer }
+                  avertissements: { type: integer }
+  /api/import/{type}/valider:
+    post:
+      tags: [Import]
+      summary: Import définitif — atomique (tout ou rien)
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string, enum: [vehicules, beneficiaires] } }
+      responses:
+        "200": { description: "{inseres: n}" }
+        "422": { description: Fichier en erreur — aucune donnée insérée }
+
+components:
+  responses:
+    Validation:
+      description: Erreur de validation
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              errors:
+                type: object
+                additionalProperties: { type: array, items: { type: string } }
+    Interdit:
+      description: Permission manquante — l'accès refusé est journalisé
+  schemas:
+    Profil:
+      type: object
+      properties:
+        utilisateur:
+          type: object
+          properties:
+            id: { type: integer }
+            nom: { type: string }
+            prenom: { type: string }
+            nom_complet: { type: string }
+            email: { type: string }
+            username: { type: string }
+            role:
+              type: object
+              properties:
+                id: { type: integer }
+                code: { type: string, enum: [administrateur, gestionnaire, valideur, consultation] }
+                libelle: { type: string }
+            doit_changer_mdp: { type: boolean }
+            totp_active: { type: boolean }
+            totp_requis: { type: boolean, description: 2FA imposée par le rôle mais non enrôlée }
+        permissions:
+          type: array
+          items: { type: string, example: vehicule.creer }
+        session:
+          type: object
+          properties:
+            inactivite_minutes: { type: integer }
+            duree_max_heures: { type: integer, example: 12 }
