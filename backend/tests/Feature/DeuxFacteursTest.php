@@ -79,7 +79,11 @@ class DeuxFacteursTest extends TestCase
 
     public function test_la_desactivation_est_refusee_si_le_role_impose_la_2fa(): void
     {
-        $admin = $this->admin(); // rôle administrateur : totp_obligatoire = true
+        // la 2FA n'est plus imposée par défaut : on l'impose ici pour tester le mécanisme
+        \App\Models\Role::where('code', \App\Models\Role::ADMINISTRATEUR)
+            ->update(['totp_obligatoire' => true]);
+
+        $admin = $this->admin();
         $secret = $this->activerTotp($admin);
 
         $this->actingAs($admin)->postJson('/api/auth/2fa/desactiver', [

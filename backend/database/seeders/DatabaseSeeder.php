@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
                 'password' => Hash::make(env('SEED_ADMIN_PASSWORD', 'Admin#2026!vignettes')),
                 'role_id' => Role::where('code', Role::ADMINISTRATEUR)->value('id'),
                 'actif' => true,
-                'doit_changer_mdp' => true,
+                'doit_changer_mdp' => false,
             ],
         );
 

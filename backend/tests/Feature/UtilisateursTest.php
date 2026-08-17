@@ -53,7 +53,7 @@ class UtilisateursTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_un_compte_cree_par_l_admin_doit_changer_son_mot_de_passe(): void
+    public function test_un_compte_cree_par_l_admin_se_connecte_directement(): void
     {
         $reponse = $this->actingAs($this->admin())->postJson('/api/utilisateurs', [
             'nom' => 'Nouveau',
@@ -65,7 +65,8 @@ class UtilisateursTest extends TestCase
         ]);
 
         $reponse->assertCreated();
-        $this->assertTrue(User::find($reponse->json('id'))->doit_changer_mdp);
+        // pas de changement forcé : accès direct au tableau de bord
+        $this->assertFalse(User::find($reponse->json('id'))->doit_changer_mdp);
     }
 
     public function test_deverrouillage_manuel_d_un_compte(): void

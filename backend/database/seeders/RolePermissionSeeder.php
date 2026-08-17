@@ -64,7 +64,7 @@ class RolePermissionSeeder extends Seeder
         // --- Rôles ----------------------------------------------------------
         $admin = Role::updateOrCreate(
             ['code' => Role::ADMINISTRATEUR],
-            ['libelle' => 'Administrateur', 'totp_obligatoire' => true,
+            ['libelle' => 'Administrateur', 'totp_obligatoire' => false,
              'description' => 'Accès total, y compris utilisateurs, paramètres et journal d\'audit.'],
         );
         $gestionnaire = Role::updateOrCreate(

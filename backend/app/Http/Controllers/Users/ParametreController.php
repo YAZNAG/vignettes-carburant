@@ -48,12 +48,6 @@ class ParametreController extends Controller
     {
         $donnees = $request->validate(['totp_obligatoire' => ['required', 'boolean']]);
 
-        if ($role->code === Role::ADMINISTRATEUR && ! $donnees['totp_obligatoire']) {
-            return response()->json([
-                'message' => 'La 2FA reste obligatoire pour le rôle Administrateur.',
-            ], 409);
-        }
-
         $role->update(['totp_obligatoire' => $donnees['totp_obligatoire']]);
 
         return response()->json(['message' => 'Rôle mis à jour.']);

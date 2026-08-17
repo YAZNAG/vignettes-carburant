@@ -81,8 +81,8 @@ class UserController extends Controller
         $donnees['password'] = $donnees['mot_de_passe_initial'];
         unset($donnees['mot_de_passe_initial']);
 
-        // Le nouvel utilisateur devra définir son propre mot de passe
-        $donnees['doit_changer_mdp'] = true;
+        // Connexion directe avec le mot de passe fourni par l'administrateur
+        $donnees['doit_changer_mdp'] = false;
         $donnees['actif'] = true;
 
         $user = User::create($donnees);
