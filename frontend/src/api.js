@@ -2,8 +2,12 @@ import axios from 'axios';
 
 const PAGES_PUBLIQUES = ['/connexion', '/mot-de-passe-oublie', '/reinitialiser-mot-de-passe'];
 
+// En production le frontend est servi par le même domaine que l'API
+// (baseURL vide = même origine) ; en développement, le backend est sur :8000.
+const baseURL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL,
   withCredentials: true,
   withXSRFToken: true,
   headers: {
