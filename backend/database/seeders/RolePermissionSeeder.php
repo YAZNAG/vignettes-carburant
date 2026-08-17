@@ -11,6 +11,7 @@ class RolePermissionSeeder extends Seeder
     /** Domaines de référentiel soumis à la matrice consulter/creer/modifier/desactiver. */
     private const DOMAINES_REFERENTIEL = [
         'vehicule' => 'Véhicules',
+        'marque' => 'Marques',
         'beneficiaire' => 'Bénéficiaires',
         'type_vignette' => 'Types de vignette',
         'coupure' => 'Coupures',

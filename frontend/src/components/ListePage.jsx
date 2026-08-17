@@ -43,6 +43,7 @@ export default function ListePage({
   champs = null,
   valeursInitiales = {},
   preparerFormulaire = null,
+  transformerEnvoi = null,
   similarite = false,
   sansDesactivation = false,
   sansExport = false,
@@ -172,7 +173,9 @@ export default function ListePage({
     setEnvoiEnCours(true);
     setErreursFormulaire({});
     setErreurFormulaire('');
-    const corps = { ...valeursFormulaire };
+    const corps = transformerEnvoi
+      ? transformerEnvoi({ ...valeursFormulaire })
+      : { ...valeursFormulaire };
     if (confirmerSimilaire) corps.confirmer_similaire = true;
     try {
       if (ligneEnEdition) {

@@ -61,7 +61,7 @@ class ReferentielsTest extends TestCase
     {
         $reponse = $this->actingAs($this->gestionnaire())->postJson('/api/vehicules', [
             'immatriculation' => '  m 214 134  ',
-            'marque' => '  Dacia   Duster  ',
+            'modele' => '  Duster   4x4  ',
             'type_vehicule' => 'Voiture',
             'type_carburant' => 'Gasoil',
             'statut' => 'Actif',
@@ -70,7 +70,7 @@ class ReferentielsTest extends TestCase
         $reponse->assertCreated();
         $this->assertDatabaseHas('vehicules', [
             'immatriculation' => 'M214134',
-            'marque' => 'Dacia Duster',
+            'modele' => 'Duster 4x4',
         ]);
     }
 

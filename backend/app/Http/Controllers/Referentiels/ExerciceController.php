@@ -24,6 +24,8 @@ class ExerciceController extends ReferentielController
 
     protected string $triDefaut = 'annee';
 
+    protected array $relations = ['soldes.typeVignette:id,libelle,code'];
+
     protected function libelleEntite(): string
     {
         return 'Exercice';
@@ -39,13 +41,18 @@ class ExerciceController extends ReferentielController
             'libelle' => ['required', 'string', 'max:100'],
             'date_debut' => ['required', 'date'],
             'date_fin' => ['required', 'date', 'after:date_debut'],
-            'stock_initial' => ['nullable', 'numeric', 'min:0'],
+            // État initial : un solde par type de vignette (carburant, e-vignette, ticket…)
+            'soldes' => ['nullable', 'array'],
+            'soldes.*.type_vignette_id' => ['required', 'integer', Rule::exists('types_vignette', 'id')],
+            'soldes.*.solde_initial' => ['required', 'numeric', 'min:0', 'max:999999999'],
         ];
     }
 
     public function store(\Illuminate\Http\Request $request): JsonResponse
     {
         $donnees = $this->normaliser($request->validate($this->regles(null)));
+        $soldes = $donnees['soldes'] ?? [];
+        unset($donnees['soldes']);
 
         // Le nouvel exercice est créé ouvert s'il n'y en a pas d'autre ouvert,
         // sinon il attend la clôture du précédent (statut "cloture" impossible
@@ -53,8 +60,39 @@ class ExerciceController extends ReferentielController
         $donnees['statut'] = Exercice::ouvert()->exists() ? Exercice::CLOTURE : Exercice::OUVERT;
 
         $exercice = Exercice::create($donnees);
+        $this->enregistrerSoldes($exercice, $soldes);
 
-        return response()->json($exercice, 201);
+        return response()->json($exercice->load($this->relations), 201);
+    }
+
+    public function update(\Illuminate\Http\Request $request, int $id): JsonResponse
+    {
+        $exercice = Exercice::findOrFail($id);
+        $donnees = $this->normaliser($request->validate($this->regles($exercice)));
+        $soldes = $donnees['soldes'] ?? null;
+        unset($donnees['soldes']);
+
+        $exercice->update($donnees);
+        if ($soldes !== null) {
+            $this->enregistrerSoldes($exercice, $soldes);
+        }
+
+        return response()->json($exercice->fresh($this->relations));
+    }
+
+    /** Enregistre l'état initial et recalcule le stock initial global. */
+    private function enregistrerSoldes(Exercice $exercice, array $soldes): void
+    {
+        foreach ($soldes as $solde) {
+            $exercice->soldes()->updateOrCreate(
+                ['type_vignette_id' => $solde['type_vignette_id']],
+                ['solde_initial' => $solde['solde_initial']],
+            );
+        }
+
+        $exercice->forceFill([
+            'stock_initial' => $exercice->soldes()->sum('solde_initial'),
+        ])->save();
     }
 
     /** Les exercices ne se désactivent pas : ils s'ouvrent ou se clôturent (lot 2). */
@@ -92,7 +130,10 @@ class ExerciceController extends ReferentielController
             'Libellé' => 'libelle',
             'Début' => fn (Model $e) => $e->date_debut?->format('d/m/Y'),
             'Fin' => fn (Model $e) => $e->date_fin?->format('d/m/Y'),
-            'Stock initial (DH)' => 'stock_initial',
+            'État initial par type' => fn (Model $e) => $e->soldes
+                ->map(fn ($s) => $s->typeVignette->libelle.' : '.number_format((float) $s->solde_initial, 2, ',', ' ').' DH')
+                ->join(' | '),
+            'Stock initial total (DH)' => 'stock_initial',
             'Statut' => fn (Model $e) => $e->statut === Exercice::OUVERT ? 'Ouvert' : 'Clôturé',
         ];
     }

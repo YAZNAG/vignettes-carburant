@@ -1,5 +1,6 @@
 import ListePage, { BadgeActif } from '../components/ListePage';
 
+const SOURCE_MARQUES = '/api/marques?actif=true&par_page=100';
 const SOURCE_SERVICES = '/api/services?actif=true&par_page=100';
 const SOURCE_SITES = '/api/sites?actif=true&par_page=100';
 const SOURCE_BENEFICIAIRES = '/api/beneficiaires?actif=true&par_page=100';
@@ -16,7 +17,7 @@ const OPTIONS_STATUT = ['Actif', 'En réparation', 'Réformé'].map((v) => ({ va
 
 const CHAMPS = [
   { nom: 'immatriculation', libelle: 'Immatriculation', requis: true },
-  { nom: 'marque', libelle: 'Marque' },
+  { nom: 'marque_id', libelle: 'Marque', type: 'select', source: SOURCE_MARQUES },
   { nom: 'modele', libelle: 'Modèle' },
   { nom: 'type_vehicule', libelle: 'Type de véhicule', type: 'select', options: OPTIONS_TYPE_VEHICULE },
   { nom: 'type_carburant', libelle: 'Type de carburant', type: 'select', options: OPTIONS_CARBURANT },
@@ -31,7 +32,7 @@ const CHAMPS = [
 
 const COLONNES = [
   { cle: 'immatriculation', libelle: 'Immatriculation', tri: true },
-  { cle: 'marque', libelle: 'Marque', tri: true },
+  { cle: 'marque', libelle: 'Marque', rendu: (l) => l.marque?.libelle ?? '—' },
   { cle: 'modele', libelle: 'Modèle', tri: true },
   { cle: 'type_vehicule', libelle: 'Type' },
   { cle: 'type_carburant', libelle: 'Carburant' },
@@ -48,6 +49,7 @@ const COLONNES = [
 ];
 
 const FILTRES = [
+  { nom: 'marque_id', libelle: 'Marque', source: SOURCE_MARQUES },
   { nom: 'service_id', libelle: 'Service', source: SOURCE_SERVICES },
   { nom: 'site_id', libelle: 'Site', source: SOURCE_SITES },
   { nom: 'statut', libelle: 'Statut', options: OPTIONS_STATUT },
@@ -75,7 +77,7 @@ export default function Vehicules() {
       libelleCreation="Nouveau véhicule"
       preparerFormulaire={(l) => ({
         immatriculation: l.immatriculation,
-        marque: l.marque,
+        marque_id: l.marque_id ?? l.marque?.id ?? null,
         modele: l.modele,
         type_vehicule: l.type_vehicule,
         type_carburant: l.type_carburant,

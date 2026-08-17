@@ -15,15 +15,15 @@ class VehiculeController extends ReferentielController
 
     protected string $modele = Vehicule::class;
 
-    protected array $colonnesRecherche = ['immatriculation', 'marque', 'modele'];
+    protected array $colonnesRecherche = ['immatriculation', 'modele'];
 
-    protected array $filtres = ['actif', 'service_id', 'site_id', 'statut', 'type_carburant'];
+    protected array $filtres = ['actif', 'service_id', 'site_id', 'statut', 'type_carburant', 'marque_id'];
 
-    protected array $tris = ['id', 'immatriculation', 'marque', 'statut', 'created_at'];
+    protected array $tris = ['id', 'immatriculation', 'statut', 'created_at'];
 
     protected string $triDefaut = 'immatriculation';
 
-    protected array $relations = ['service:id,libelle', 'site:id,libelle', 'conducteur:id,nom,prenom,matricule'];
+    protected array $relations = ['marque:id,libelle', 'service:id,libelle', 'site:id,libelle', 'conducteur:id,nom,prenom,matricule'];
 
     protected function libelleEntite(): string
     {
@@ -37,7 +37,7 @@ class VehiculeController extends ReferentielController
                 'required', 'string', 'max:20',
                 Rule::unique('vehicules', 'immatriculation')->ignore($existant?->id),
             ],
-            'marque' => ['nullable', 'string', 'max:50'],
+            'marque_id' => ['nullable', 'integer', Rule::exists('marques', 'id')->where('actif', true)],
             'modele' => ['nullable', 'string', 'max:50'],
             'type_vehicule' => ['required', Rule::in(Vehicule::TYPES_VEHICULE)],
             'type_carburant' => ['required', Rule::in(Vehicule::TYPES_CARBURANT)],
@@ -103,7 +103,7 @@ class VehiculeController extends ReferentielController
     {
         return [
             'Immatriculation' => 'immatriculation',
-            'Marque' => 'marque',
+            'Marque' => 'marque.libelle',
             'Modèle' => 'modele',
             'Type' => 'type_vehicule',
             'Carburant' => 'type_carburant',

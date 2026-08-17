@@ -32,12 +32,14 @@ class DatabaseSeeder extends Seeder
         );
 
         // --- Types de vignette et coupures ---------------------------------
-        $papier = TypeVignette::firstOrCreate(['code' => 'VP'], ['libelle' => 'Vignette papier']);
+        $carburant = TypeVignette::firstOrCreate(['code' => 'VP'], ['libelle' => 'Vignette carburant']);
         $evignette = TypeVignette::firstOrCreate(['code' => 'EV'], ['libelle' => 'E-vignette']);
+        $ticket = TypeVignette::firstOrCreate(['code' => 'TK'], ['libelle' => 'Ticket']);
 
         foreach ([100, 200, 500, 1000] as $valeur) {
-            $papier->coupures()->firstOrCreate(['valeur' => $valeur]);
+            $carburant->coupures()->firstOrCreate(['valeur' => $valeur]);
             $evignette->coupures()->firstOrCreate(['valeur' => $valeur]);
+            $ticket->coupures()->firstOrCreate(['valeur' => $valeur]);
         }
 
         // --- Motifs de sortie ----------------------------------------------

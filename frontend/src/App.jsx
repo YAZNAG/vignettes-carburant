@@ -19,6 +19,7 @@ import Sites from './pages/Sites';
 import TableauDeBord from './pages/TableauDeBord';
 import TypesVignette from './pages/TypesVignette';
 import Utilisateurs from './pages/Utilisateurs';
+import Marques from './pages/Marques';
 import Vehicules from './pages/Vehicules';
 
 function ExigeAuth() {
@@ -76,6 +77,14 @@ export default function App() {
             element={
               <ExigePermission code="vehicule.consulter">
                 <Vehicules />
+              </ExigePermission>
+            }
+          />
+          <Route
+            path="/marques"
+            element={
+              <ExigePermission code="marque.consulter">
+                <Marques />
               </ExigePermission>
             }
           />

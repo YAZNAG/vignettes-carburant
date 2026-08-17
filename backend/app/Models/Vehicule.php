@@ -15,7 +15,7 @@ class Vehicule extends Model
     public const STATUTS = ['Actif', 'En réparation', 'Réformé'];
 
     protected $fillable = [
-        'immatriculation', 'marque', 'modele', 'type_vehicule', 'type_carburant',
+        'immatriculation', 'marque_id', 'modele', 'type_vehicule', 'type_carburant',
         'service_id', 'site_id', 'conducteur_id', 'plafond_mensuel', 'statut',
         'date_mise_en_service', 'observation', 'actif',
     ];
@@ -27,6 +27,11 @@ class Vehicule extends Model
             'plafond_mensuel' => 'decimal:2',
             'date_mise_en_service' => 'date',
         ];
+    }
+
+    public function marque(): BelongsTo
+    {
+        return $this->belongsTo(Marque::class);
     }
 
     public function service(): BelongsTo

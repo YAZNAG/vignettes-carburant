@@ -7,6 +7,7 @@ import { Modal } from './Modal';
 const ENTREES_MENU = [
   { chemin: '/', libelle: 'Tableau de bord', permission: null },
   { chemin: '/vehicules', libelle: 'Véhicules', permission: 'vehicule.consulter' },
+  { chemin: '/marques', libelle: 'Marques', permission: 'marque.consulter' },
   { chemin: '/beneficiaires', libelle: 'Bénéficiaires', permission: 'beneficiaire.consulter' },
   { chemin: '/types-vignette', libelle: 'Types de vignette', permission: 'type_vignette.consulter' },
   { chemin: '/motifs-sortie', libelle: 'Motifs de sortie', permission: 'motif_sortie.consulter' },

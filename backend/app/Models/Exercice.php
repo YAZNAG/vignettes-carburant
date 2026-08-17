@@ -28,6 +28,12 @@ class Exercice extends Model
         ];
     }
 
+    /** État initial : un solde par type de vignette (carburant, e-vignette, ticket…). */
+    public function soldes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ExerciceSolde::class);
+    }
+
     public function scopeOuvert(Builder $query): Builder
     {
         return $query->where('statut', self::OUVERT);

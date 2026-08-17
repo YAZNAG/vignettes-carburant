@@ -96,6 +96,7 @@ Route::middleware(['auth:sanctum', 'session.limites', 'mdp.force'])->group(funct
     */
     $referentiels = [
         'vehicules' => VehiculeController::class,
+        'marques' => \App\Http\Controllers\Referentiels\MarqueController::class,
         'beneficiaires' => BeneficiaireController::class,
         'services' => ServiceController::class,
         'sites' => SiteController::class,

@@ -22,6 +22,9 @@ class ImportService
         private readonly SimilariteService $similarite,
     ) {}
 
+    /** true uniquement lors de l'import définitif : la prévisualisation n'écrit rien. */
+    private bool $creerReferences = false;
+
     /** Définition des colonnes par type d'import. */
     public function colonnes(string $type): array
     {
@@ -57,8 +60,9 @@ class ImportService
      *
      * @return array{lignes: array, importables: int, erreurs: int, avertissements: int}
      */
-    public function analyser(string $type, UploadedFile $fichier): array
+    public function analyser(string $type, UploadedFile $fichier, bool $creerReferences = false): array
     {
+        $this->creerReferences = $creerReferences;
         $brutes = $this->lireFichier($fichier);
         $rapport = [];
         $vuesDansFichier = [];
@@ -137,7 +141,7 @@ class ImportService
      */
     public function importer(string $type, UploadedFile $fichier): int
     {
-        $rapport = $this->analyser($type, $fichier);
+        $rapport = $this->analyser($type, $fichier, creerReferences: true);
 
         if ($rapport['erreurs'] > 0) {
             throw new \RuntimeException(
@@ -247,7 +251,9 @@ class ImportService
         if ($type === 'vehicules') {
             $donnees = [
                 'immatriculation' => $v('immatriculation') ? mb_strtoupper(preg_replace('/\s+/u', '', $v('immatriculation'))) : null,
-                'marque' => $v('marque'),
+                // la marque est un référentiel : créée à la volée lors de
+                // l'import définitif (jamais pendant la prévisualisation)
+                'marque_id' => $this->resoudreMarque($v('marque')),
                 'modele' => $v('modele'),
                 'type_vehicule' => $v('type_vehicule') ?? 'Voiture',
                 'type_carburant' => $v('type_carburant') ?? 'Gasoil',
@@ -310,6 +316,19 @@ class ImportService
         $donnees['site_id'] = $this->resoudreReference(Site::class, ['libelle'], $v('site'), 'Site', $erreurs);
 
         return $donnees;
+    }
+
+    private function resoudreMarque(?string $libelle): ?int
+    {
+        if ($libelle === null) {
+            return null;
+        }
+
+        $normalise = mb_convert_case(mb_strtolower($libelle), MB_CASE_TITLE, 'UTF-8');
+
+        return $this->creerReferences
+            ? \App\Models\Marque::firstOrCreate(['libelle' => $normalise])->id
+            : \App\Models\Marque::where('libelle', $normalise)->value('id');
     }
 
     private function resoudreReference(string $modele, array $colonnes, ?string $valeur, string $libelle, array &$erreurs): ?int
